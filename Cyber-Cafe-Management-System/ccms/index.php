@@ -3,18 +3,36 @@ session_start();
 error_reporting(0);
 include('includes/dbconnection.php');
 
+$msg = "";
 if(isset($_POST['login']))
   {
-    $adminuser=$_POST['username'];
+    $adminuser=trim($_POST['username']);
     $password=md5($_POST['password']);
-    $query=mysqli_query($con,"select ID from tbladmin where  UserName='$adminuser' && Password='$password' ");
-    $ret=mysqli_fetch_array($query);
-    if($ret>0){
-      $_SESSION['ccmsaid']=$ret['ID'];
-     header('location:dashboard.php');
-    }
-    else{
-    $msg="Invalid Details.";
+    if ($con) {
+        $query=mysqli_query($con,"select ID from tbladmin where UserName='$adminuser' && Password='$password' ");
+        
+        // If query failed, trigger self-heal schema creation and retry
+        if (!$query && isset($db_instance) && method_exists($db_instance, 'selfHealSchema')) {
+            $db_instance->selfHealSchema();
+            $query=mysqli_query($con,"select ID from tbladmin where UserName='$adminuser' && Password='$password' ");
+        }
+
+        if ($query && $query instanceof mysqli_result) {
+            $ret=mysqli_fetch_array($query);
+            if($ret && isset($ret['ID'])){
+                $_SESSION['ccmsaid']=$ret['ID'];
+                header('location:dashboard.php');
+                exit;
+            }
+            else{
+                $msg="Invalid Details. Default: admin / admin";
+            }
+        } else {
+            $err = mysqli_error($con);
+            $msg="Database query error: " . ($err ?: "Please run db_setup.php to verify tables.");
+        }
+    } else {
+        $msg="Database connection not available.";
     }
   }
   ?>
@@ -55,8 +73,8 @@ if(isset($_POST['login']))
                 </div>
                 <div class="login-form">
                     <form action="" method="post" name="login">
-                        <p style="font-size:16px; color:red" align="center"> <?php if($msg){
-    echo $msg;
+                        <p style="font-size:16px; color:red" align="center"> <?php if(!empty($msg)){
+    echo htmlspecialchars($msg);
   }  ?> </p>
                         <div class="form-group">
                             <label>User Name</label>

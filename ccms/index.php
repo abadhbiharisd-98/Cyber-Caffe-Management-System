@@ -9,7 +9,14 @@ if(isset($_POST['login']))
     $adminuser=trim($_POST['username']);
     $password=md5($_POST['password']);
     if ($con) {
-        $query=mysqli_query($con,"select ID from tbladmin where  UserName='$adminuser' && Password='$password' ");
+        $query=mysqli_query($con,"select ID from tbladmin where UserName='$adminuser' && Password='$password' ");
+        
+        // If query failed, trigger self-heal schema creation and retry
+        if (!$query && isset($db_instance) && method_exists($db_instance, 'selfHealSchema')) {
+            $db_instance->selfHealSchema();
+            $query=mysqli_query($con,"select ID from tbladmin where UserName='$adminuser' && Password='$password' ");
+        }
+
         if ($query && $query instanceof mysqli_result) {
             $ret=mysqli_fetch_array($query);
             if($ret && isset($ret['ID'])){
@@ -18,10 +25,11 @@ if(isset($_POST['login']))
                 exit;
             }
             else{
-                $msg="Invalid Details.";
+                $msg="Invalid Details. Default: admin / admin";
             }
         } else {
-            $msg="Database query error. Please run db_setup.php to verify tables.";
+            $err = mysqli_error($con);
+            $msg="Database query error: " . ($err ?: "Please run db_setup.php to verify tables.");
         }
     } else {
         $msg="Database connection not available.";

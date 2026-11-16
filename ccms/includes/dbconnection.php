@@ -143,11 +143,85 @@ class DBConnection {
             } else {
                 @mysqli_set_charset($this->conn, 'utf8mb4');
                 @mysqli_query($this->conn, "SET SESSION sql_require_primary_key = 0");
+
+                // Auto-detect and ensure tbladmin table exists in current database or switch to fallback
+                $check_tbl = @mysqli_query($this->conn, "SELECT 1 FROM `tbladmin` LIMIT 1");
+                if (!$check_tbl) {
+                    if (@mysqli_select_db($this->conn, 'ccmsdb') && @mysqli_query($this->conn, "SELECT 1 FROM `tbladmin` LIMIT 1")) {
+                        $this->database = 'ccmsdb';
+                    } elseif (@mysqli_select_db($this->conn, 'defaultdb') && @mysqli_query($this->conn, "SELECT 1 FROM `tbladmin` LIMIT 1")) {
+                        $this->database = 'defaultdb';
+                    } else {
+                        // Self-heal: auto-create tables
+                        $this->selfHealSchema();
+                    }
+                }
             }
         } catch (Throwable $e) {
             $this->connect_error = $e->getMessage();
             error_log("Database Exception: " . $this->connect_error);
         }
+    }
+
+    public function selfHealSchema() {
+        if (!$this->conn) return false;
+        @mysqli_query($this->conn, "SET SESSION sql_require_primary_key = 0");
+        @mysqli_query($this->conn, "SET FOREIGN_KEY_CHECKS = 0");
+
+        @mysqli_query($this->conn, "CREATE TABLE IF NOT EXISTS `tbladmin` (
+          `ID` int(10) NOT NULL AUTO_INCREMENT,
+          `AdminName` varchar(120) DEFAULT NULL,
+          `UserName` varchar(120) DEFAULT NULL,
+          `MobileNumber` bigint(10) NOT NULL,
+          `Email` varchar(200) NOT NULL,
+          `Password` varchar(120) DEFAULT NULL,
+          `AdminRegdate` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (`ID`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        @mysqli_query($this->conn, "INSERT INTO `tbladmin` (`ID`, `AdminName`, `UserName`, `MobileNumber`, `Email`, `Password`, `AdminRegdate`) VALUES
+        (1, 'Admin', 'admin', 8979555556, 'admin@gmail.com', '21232f297a57a5a743894a0e4a801fc3', NOW())
+        ON DUPLICATE KEY UPDATE `UserName`=VALUES(`UserName`)");
+
+        @mysqli_query($this->conn, "CREATE TABLE IF NOT EXISTS `tblcomputers` (
+          `ID` int(10) NOT NULL AUTO_INCREMENT,
+          `ComputerName` varchar(120) DEFAULT NULL,
+          `ComputerLocation` varchar(120) DEFAULT NULL,
+          `IPAdd` varchar(120) DEFAULT NULL,
+          `EntryDate` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (`ID`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        @mysqli_query($this->conn, "INSERT INTO `tblcomputers` (`ID`, `ComputerName`, `ComputerLocation`, `IPAdd`, `EntryDate`) VALUES
+        (1, 'Acer', 'Cabin101', '127.0.0.1', NOW()),
+        (2, 'ASUS', 'Cabin102', '127.0.0.2', NOW()),
+        (3, 'DELL', 'Cabin103', '127.0.0.2', NOW())
+        ON DUPLICATE KEY UPDATE `ComputerName`=VALUES(`ComputerName`)");
+
+        @mysqli_query($this->conn, "CREATE TABLE IF NOT EXISTS `tblusers` (
+          `ID` int(10) NOT NULL AUTO_INCREMENT,
+          `EntryID` varchar(20) DEFAULT NULL,
+          `UserName` varchar(120) DEFAULT NULL,
+          `UserAddress` varchar(200) DEFAULT NULL,
+          `MobileNumber` bigint(10) DEFAULT NULL,
+          `Email` varchar(200) DEFAULT NULL,
+          `ComputerName` varchar(120) DEFAULT NULL,
+          `IDProof` varchar(120) DEFAULT NULL,
+          `InTime` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+          `OutTime` timestamp NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+          `Fees` varchar(120) DEFAULT NULL,
+          `Remark` varchar(120) DEFAULT NULL,
+          `Status` varchar(20) NOT NULL,
+          `UpdationDate` timestamp NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+          PRIMARY KEY (`ID`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        @mysqli_query($this->conn, "INSERT INTO `tblusers` (`ID`, `EntryID`, `UserName`, `UserAddress`, `MobileNumber`, `Email`, `ComputerName`, `IDProof`, `InTime`, `OutTime`, `Fees`, `Remark`, `Status`, `UpdationDate`) VALUES
+        (4, '634737642', 'Test user', 'New Delhi India', 1234567890, 'test@test.com', 'Asus Gaming Laptop', '184716461', NOW(), NOW(), '30', 'Check out', 'Out', NOW())
+        ON DUPLICATE KEY UPDATE `UserName`=VALUES(`UserName`)");
+
+        @mysqli_query($this->conn, "SET FOREIGN_KEY_CHECKS = 1");
+        return true;
     }
 
     public function getConnection() {
@@ -171,7 +245,6 @@ $con = $db_instance->getConnection();
 $conn = $con;
 
 if (!$db_instance->isConnected()) {
-    // If connection failed, provide safe fallback notice in error log
     error_log("CCMS Database Connection failed: " . $db_instance->connect_error);
 }
 ?>
