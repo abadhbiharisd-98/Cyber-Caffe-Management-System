@@ -1,0 +1,11 @@
+*.original
+*.bak
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+node_modules/
+package-lock.json
+package.json
+.env
+README.txt
